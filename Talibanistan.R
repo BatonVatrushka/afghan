@@ -34,7 +34,7 @@ talib = afg %>% filter(side_b == "Taleban") %>%
               strptime(format = "%m/%d/%Y", tz = "UTC") %>% as_date()))
 
 # look at the longest battles
-talib %>% select(battle_length)  %>% top_n(20) %>% arrange(battle_length %>% desc())
+talib %>% select(battle_length) %>% top_n(20) %>% arrange(battle_length %>% desc())
 
 # look at the distribution of Talib deaths
 talib %>% ggplot() + aes(deaths_b) %>% geom_histogram(color = 'black'
@@ -51,7 +51,7 @@ talib %>% group_by(year) %>% summarise(deaths = deaths_a %>% sum()) %>%
   ggplot() + aes(year, deaths) + geom_col(color = "black") 
 
 # column graph of total deaths by year
-talib  %>%  mutate(year = strptime(year, format = '%Y') %>% as_date()) %>%
+talib %>% mutate(year = strptime(year, format = '%Y') %>% as_date()) %>%
   group_by(year) %>% 
   summarise(deaths = best_est %>% sum()) %>%
   ggplot() + aes(year, deaths) + geom_col(color = "black") +
@@ -68,7 +68,7 @@ talib  %>%  mutate(year = strptime(year, format = '%Y') %>% as_date()) %>%
   ggplot() + aes(year, deaths) + geom_col(color = "black") +
   scale_x_date(breaks = "2 year",date_labels = "%Y") + theme_minimal()
 
-s#===================
+#===================
 # PAKISTAN 
 #===================
 us_pak = pak %>% filter(side_a %in% c("Government of Afghanistan"
@@ -82,12 +82,17 @@ us_pak %>% group_by(year, side_b) %>% summarise(deaths = deaths_b %>% sum()) %>%
 # Map w/ Shape File
 #===============================================================================
 #ogrListLayers('gadm36_AFG_1.shp')
-afghanistan = readOGR('afg_shp_files/gadm36_AFG_1.shp')
-afghanistan %>% plot()
-afghanistan$NAME_1
+#afghanistan = readOGR('afg_shp_files/gadm36_AFG_1.shp')
+afghanistan <- st_read('./afg_shp_files/gadm36_AFG_shp/gadm36_AFG_1.shp')
+
+# map of Afghanistan
+ggplot(data = afghanistan) +
+  geom_sf() +
+  ggtitle("Map of Afghanistan") +
+  theme_minimal()
 
 # create the data frame w/ fortify
-map = afghanistan %>% fortify(region = "NAME_1")
+# map = afghanistan %>% fortify(region = "NAME_1")
 
 # check the province names between Spatial Object and DF
 cbind(afghanistan$NAME_1 %>% sort()
@@ -98,49 +103,39 @@ afg$adm_1 = gsub(pattern = " province", "", afg$adm_1)
 
 # check the province names between Spatial Object and DF
 cbind(afghanistan$NAME_1 %>% sort()
-      , afg$adm_1 %>% unique() %>% na.omit() %>% sort())
+      , afg$adm_1 %>% 
+        unique() %>% 
+        na.omit() %>% 
+        sort())
 
 # create a deaths df
-deaths = afg %>% group_by(adm_1) %>% summarise(deaths = deaths_b %>% sum()) %>%
+deaths = afg %>% 
+  group_by(adm_1) %>% 
+  summarise(deaths = deaths_b %>% sum()) %>%
   filter(adm_1 != "NA")
-# rename adm_1 in deaths
-deaths = deaths %>% rename("id" = adm_1) 
+
 # rename Panjsher
-deaths$id[deaths$id == "Panjsher"] = "Panjshir"
+deaths <- deaths %>%
+  mutate(adm_1 = if_else(adm_1 == "Panjsher", "Panjshir", adm_1)) %>% 
+  rename(NAME_1 = adm_1)
 
- # merge the data frames
-afg_map = inner_join(map, deaths, by = "id")
+# left join deaths to afghanistan
+afghanistan <- afghanistan %>% left_join(deaths, by = 'NAME_1')
 
-# extract names and centroids
-centroids = data.frame(long = coordinates(afghanistan)[,1]
-                       , lat = coordinates(afghanistan)[, 2])
-
-centroids[, ]
-# get names and id numbers corresponding to administrative areas
-centroids[, "GID_1"]  = afghanistan@data[, "GID_1"]
-centroids[, "NAME_1"] = afghanistan@data[, "NAME_1"]
-
-# plot the map
-ggplot(afg_map) + aes(long, lat) +  
-  
-  geom_polygon(aes(fill = deaths, group = group)
-               , color = 'black') + 
-  
-  geom_text(data = centroids
-            , aes(label = NAME_1, x = long, y = lat, group = NAME_1)
-            , size = 3
-            , color = 'black') +
-  
-  scale_fill_gradient(low = "white", high = "red") +
-  
-  theme_nothing()
+# create the 
+ggplot(data = afghanistan) +
+  geom_sf(aes(fill = deaths)) 
+  scale_fill_gradientn(colors = c("white", "orange", "red"),
+                       values = c(0, 0.5, 1), # can be adjusted based on distribution  
+                       limits = c(min(afghanistan$deaths, na.rm = TRUE), 
+                                  max(afghanistan$deaths, na.rm = TRUE)),
+                       name = "Death Count") +
+  labs(title = "Choropleth Map of Afghanistan") +
+  theme_minimal()
 
 #===============================================================================
 # Pakistan
 #===============================================================================
-# get the map for pakistan
-# pak = raster::getData(name = "GADM", country = "PAK", level = 1)
-
 # get the map from the shape file
 pakistan = readOGR('pak_adm_ocha_pco_gaul_20181218_SHP/pak_admbnda_adm1_ocha_pco_gaul_20181218.shp')
 
